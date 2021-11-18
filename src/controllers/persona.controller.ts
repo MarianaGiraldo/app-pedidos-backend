@@ -1,3 +1,4 @@
+import {service} from '@loopback/core';
 import {
   Count,
   CountSchema,
@@ -7,23 +8,31 @@ import {
   Where,
 } from '@loopback/repository';
 import {
-  post,
-  param,
+  del,
   get,
   getModelSchemaRef,
+  param,
   patch,
+  post,
   put,
-  del,
   requestBody,
   response,
 } from '@loopback/rest';
+import {error} from 'util';
 import {Persona} from '../models';
 import {PersonaRepository} from '../repositories';
+import {AutenticacionService} from '../services';
+// import fetch from 'node-fetch';
+const generador = require("password-generator")
+const cryptoJS = require("crypto-js")
 
 export class PersonaController {
   constructor(
     @repository(PersonaRepository)
-    public personaRepository : PersonaRepository,
+    public personaRepository: PersonaRepository,
+
+    @service(AutenticacionService)
+    public servicioAutenticacion = AutenticacionService,
   ) {}
 
   @post('/personas')
@@ -44,7 +53,33 @@ export class PersonaController {
     })
     persona: Omit<Persona, 'id'>,
   ): Promise<Persona> {
-    return this.personaRepository.create(persona);
+    //let clave = this.servicioAutenticacion.GenerarClave();
+    let clave = generador(8, false);
+    //let claveCifrada = this.servicioAutenticacion.CifrarClave(clave);
+    let claveCifrada = cryptoJS.MD5(clave).toString();
+    persona.clave = claveCifrada;
+    let p =  await this.personaRepository.create(persona);
+    console.log(p)
+
+    //Notificar al usuario
+    let destino = persona.correo;
+    let asunto = 'Registro en la plataforma';
+    let contenido = `Hola ${persona.nombres}, su nombre de usuario es: ${persona.correo} y tu contraseña es: ${clave} `;
+    let fetchUrl = `http://127.0.0.1:5000/envio-correo?correo-destino=${destino}&asunto=${asunto}&contenido=${contenido}`;
+    (async () => {
+      try {
+        import('node-fetch').then(async function ({default: fetch}) {
+            return await fetch(fetchUrl).then((data:any) => console.log(data));
+          }).catch();
+      } catch (error) {
+        if (error.name === 'ERR_REQUIRE_ESM') {
+          console.log('request was aborted');
+        }
+        console.log(error.message)
+      }
+    });
+
+    return p;
   }
 
   @get('/personas/count')
@@ -52,9 +87,7 @@ export class PersonaController {
     description: 'Persona model count',
     content: {'application/json': {schema: CountSchema}},
   })
-  async count(
-    @param.where(Persona) where?: Where<Persona>,
-  ): Promise<Count> {
+  async count(@param.where(Persona) where?: Where<Persona>): Promise<Count> {
     return this.personaRepository.count(where);
   }
 
@@ -106,7 +139,8 @@ export class PersonaController {
   })
   async findById(
     @param.path.string('id') id: string,
-    @param.filter(Persona, {exclude: 'where'}) filter?: FilterExcludingWhere<Persona>
+    @param.filter(Persona, {exclude: 'where'})
+    filter?: FilterExcludingWhere<Persona>,
   ): Promise<Persona> {
     return this.personaRepository.findById(id, filter);
   }
@@ -148,3 +182,5 @@ export class PersonaController {
     await this.personaRepository.deleteById(id);
   }
 }
+
+
