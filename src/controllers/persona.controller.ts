@@ -11,6 +11,7 @@ import {
   del,
   get,
   getModelSchemaRef,
+  HttpErrors,
   param,
   patch,
   post,
@@ -19,10 +20,12 @@ import {
   response,
 } from '@loopback/rest';
 import {error} from 'util';
-import {Persona} from '../models';
+import {Llaves} from '../config/llaves';
+import {Credenciales, NotificacionCorreo, Persona} from '../models';
 import {PersonaRepository} from '../repositories';
-import {AutenticacionService} from '../services';
-// import fetch from 'node-fetch';
+import {NotificacionService} from '../services';
+import {AutenticacionService} from '../services/autenticacion.service';
+const fetch = require("node-fetch")
 const generador = require("password-generator")
 const cryptoJS = require("crypto-js")
 
@@ -33,7 +36,38 @@ export class PersonaController {
 
     @service(AutenticacionService)
     public servicioAutenticacion = AutenticacionService,
+
+    @service(NotificacionService)
+    public servicioNotificaciones = NotificacionService
   ) {}
+
+  // @post('identificarPersona', {
+  //   responses : {
+  //     '200':{
+  //       description : "Identificación de usuarios"
+  //     }
+  //   }
+  // } )
+
+  // async identificarPersona(
+  //   @requestBody() credenciales : Credenciales
+  // ){
+  //   let p = await this.servicioAutenticacion.IdentificarPersona(credenciales.usuario, credenciales.clave)
+  //   if(p){
+  //     let token = this.servicioAutenticacion.GenerarTokenJWT(p);
+  //     return {
+  //       datos: {
+  //         nombre: p.nombres,
+  //         correo: p.correo,
+  //         id: p.id,
+  //       },
+  //       tk: token
+  //     }
+  //   }else{
+  //     throw new HttpErrors[401]("Datos inválidos");
+
+  //   }
+  // }
 
   @post('/personas')
   @response(200, {
@@ -62,22 +96,13 @@ export class PersonaController {
     console.log(p)
 
     //Notificar al usuario
-    let destino = persona.correo;
-    let asunto = 'Registro en la plataforma';
-    let contenido = `Hola ${persona.nombres}, su nombre de usuario es: ${persona.correo} y tu contraseña es: ${clave} `;
-    let fetchUrl = `http://127.0.0.1:5000/envio-correo?correo-destino=${destino}&asunto=${asunto}&contenido=${contenido}`;
-    (async () => {
-      try {
-        import('node-fetch').then(async function ({default: fetch}) {
-            return await fetch(fetchUrl).then((data:any) => console.log(data));
-          }).catch();
-      } catch (error) {
-        if (error.name === 'ERR_REQUIRE_ESM') {
-          console.log('request was aborted');
-        }
-        console.log(error.message)
-      }
-    });
+    let notificacion = new NotificacionCorreo();
+    notificacion.destinatario = persona.correo;
+    notificacion.asunto = "Registro en el sistema";
+    notificacion.mensaje = `Hola ${persona.nombres}.<br/> Su nombre de usuario es: ${persona.correo} y su contraseña es: ${clave} `;
+    //this.servicioNotificaciones.EnviarCorreo(notificacion);
+    EnviarCorreo(notificacion);
+
 
     return p;
   }
@@ -181,6 +206,12 @@ export class PersonaController {
   async deleteById(@param.path.string('id') id: string): Promise<void> {
     await this.personaRepository.deleteById(id);
   }
+}
+function EnviarCorreo(notificacion : NotificacionCorreo): Boolean{
+  let url = `${Llaves.urlServicioNotificaciones}/envio-correo?hash=${Llaves.hash_notificaciones}&correo-destino=${notificacion.destinatario}&asunto=${notificacion.asunto}&contenido=${notificacion.mensaje}`;
+  fetch(url)
+    .then((data: any)=> true)
+  return false;
 }
 
 
