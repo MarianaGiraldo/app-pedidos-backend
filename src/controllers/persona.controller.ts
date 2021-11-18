@@ -25,9 +25,10 @@ import {Credenciales, NotificacionCorreo, Persona} from '../models';
 import {PersonaRepository} from '../repositories';
 import {NotificacionService} from '../services';
 import {AutenticacionService} from '../services/autenticacion.service';
-const fetch = require("node-fetch")
-const generador = require("password-generator")
-const cryptoJS = require("crypto-js")
+const fetch = require("node-fetch");
+const generador = require("password-generator");
+const cryptoJS = require("crypto-js");
+const jwt = require("jsonwebtoken");
 
 export class PersonaController {
   constructor(
@@ -41,33 +42,34 @@ export class PersonaController {
     public servicioNotificaciones = NotificacionService
   ) {}
 
-  // @post('identificarPersona', {
-  //   responses : {
-  //     '200':{
-  //       description : "Identificación de usuarios"
-  //     }
-  //   }
-  // } )
+  @post('/identificarPersona', {
+    responses : {
+      '200':{
+        description : "Identificación de usuarios"
+      }
+    }
+  } )
+  async identificarPersona(
+    @requestBody() credenciales : Credenciales
+  ){
+    //let p = await this.servicioAutenticacion.IdentificarPersona(credenciales.usuario, credenciales.clave)
+    let p = await IdentificarPersona(credenciales.usuario, credenciales.clave, this.personaRepository)
+    if(p){
+      //let token = this.servicioAutenticacion.GenerarTokenJWT(p);
+      let token = GenerarTokenJWT(p);
+      return {
+        datos: {
+          nombre: p.nombres,
+          correo: p.correo,
+          id: p.id,
+        },
+        tk: token
+      }
+    }else{
+      throw new HttpErrors[401]("Datos inválidos");
 
-  // async identificarPersona(
-  //   @requestBody() credenciales : Credenciales
-  // ){
-  //   let p = await this.servicioAutenticacion.IdentificarPersona(credenciales.usuario, credenciales.clave)
-  //   if(p){
-  //     let token = this.servicioAutenticacion.GenerarTokenJWT(p);
-  //     return {
-  //       datos: {
-  //         nombre: p.nombres,
-  //         correo: p.correo,
-  //         id: p.id,
-  //       },
-  //       tk: token
-  //     }
-  //   }else{
-  //     throw new HttpErrors[401]("Datos inválidos");
-
-  //   }
-  // }
+    }
+  }
 
   @post('/personas')
   @response(200, {
@@ -87,10 +89,10 @@ export class PersonaController {
     })
     persona: Omit<Persona, 'id'>,
   ): Promise<Persona> {
-    //let clave = this.servicioAutenticacion.GenerarClave();
-    let clave = generador(8, false);
-    //let claveCifrada = this.servicioAutenticacion.CifrarClave(clave);
-    let claveCifrada = cryptoJS.MD5(clave).toString();
+    // let clave = this.servicioAutenticacion.GenerarClave();
+    // let claveCifrada = this.servicioAutenticacion.CifrarClave(clave);
+    let clave = GenerarClave();
+    let claveCifrada = CifrarClave(clave);
     persona.clave = claveCifrada;
     let p =  await this.personaRepository.create(persona);
     console.log(p)
@@ -207,11 +209,55 @@ export class PersonaController {
     await this.personaRepository.deleteById(id);
   }
 }
+
+//Notificacion Service
 function EnviarCorreo(notificacion : NotificacionCorreo): Boolean{
   let url = `${Llaves.urlServicioNotificaciones}/envio-correo?hash=${Llaves.hash_notificaciones}&correo-destino=${notificacion.destinatario}&asunto=${notificacion.asunto}&contenido=${notificacion.mensaje}`;
   fetch(url)
     .then((data: any)=> true)
   return false;
+}
+
+
+//Autenticacion Service
+function GenerarClave(){
+  let clave = generador(8, false)
+  return clave
+}
+function CifrarClave(clave: string){
+  let claveCifrada = cryptoJS.MD5(clave).toString();
+  return claveCifrada;}
+
+function IdentificarPersona(usuario: string, clave: string, personaRepository: PersonaRepository){
+try {
+  let p = personaRepository.findOne({where:{correo: usuario, clave: clave}});
+  if(p){
+    return p;
+  }
+  return false;
+} catch{
+  return false;
+}
+}
+function GenerarTokenJWT(persona : Persona){
+  let token = jwt.sign({
+    data:{
+      id: persona.id,
+      correo: persona.correo,
+      nombre: persona.nombres + " " + persona.apellidos
+    }
+  },
+  Llaves.claveJWT);
+  return token;
+}
+
+function ValidarTokenJWT(token : string){
+  try {
+    let datos = jwt.verify(token, Llaves.claveJWT);
+    return datos;
+  } catch {
+    return false;
+  }
 }
 
 

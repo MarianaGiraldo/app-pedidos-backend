@@ -25,7 +25,7 @@ export class AutenticacionService {
     let claveCifrada = cryptoJS.MD5(clave).toString();
     return claveCifrada;}
 
-  public IdentificarPersona(usuario: string, clave: string){
+  IdentificarPersona(usuario: string, clave: string){
   try {
     let p = this.personaRepository.findOne({where:{correo: usuario, clave: clave}});
     if(p){
@@ -36,7 +36,6 @@ export class AutenticacionService {
     return false;
   }
   }
-
   GenerarTokenJWT(persona : Persona){
     let token = jwt.sign({
       data:{
